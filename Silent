@@ -1,0 +1,88 @@
+function CalculateChance(Percentage)
+    Percentage = math.floor(Percentage)
+    local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
+    return chance <= Percentage / 100
+end
+
+function getPositionOnScreen(Vector)
+    local Vec3, OnScreen = WorldToScreen(Camera, Vector)
+    return Vector2.new(Vec3.X, Vec3.Y), OnScreen
+end
+
+function ValidateArguments(Args, RayMethod)
+    local Matches = 0
+    if #Args < RayMethod.ArgCountRequired then
+        return false
+    end
+    for Pos, Argument in next, Args do
+        if typeof(Argument) == RayMethod.Args[Pos] then
+            Matches = Matches + 1
+        end
+    end
+    return Matches >= RayMethod.ArgCountRequired
+end
+
+function getDirection(Origin, Position)
+    return (Position - Origin).Unit * 1000
+end
+
+local function getMousePosition()
+    return GetMouseLocation(UserInputService)
+end
+
+function IsPlayerVisible(Player)
+    local PlayerCharacter = Player.Character
+    local LocalPlayerCharacter = LocalPlayer.Character
+    
+    if not (PlayerCharacter or LocalPlayerCharacter) then return end 
+    
+    local PlayerRoot = FindFirstChild(PlayerCharacter, RiftCoreSettings["Combat Mods"]["Silent Aim"]["Target Part"]) or FindFirstChild(PlayerCharacter, "HumanoidRootPart")
+    
+    if not PlayerRoot then return end 
+    
+    local CastPoints, IgnoreList = {PlayerRoot.Position, LocalPlayerCharacter, PlayerCharacter}, {LocalPlayerCharacter, PlayerCharacter}
+    local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
+    
+    return ((ObscuringObjects == 0 and true) or (ObscuringObjects > 0 and false))
+end
+
+function getClosestPlayer()
+    if not RiftCoreSettings["Combat Mods"]["Silent Aim"]["Target Part"] then return end
+    local Closest
+    local DistanceToMouse
+    local priorityUsers = RiftCoreSettings["Combat Mods"]["Silent Aim"]["Priority Users"]
+    local whitelistedUsers2 = RiftCoreSettings["Combat Mods"]["Silent Aim"]["WhitelistedUsers"]
+
+    for _, Player in next, GetPlayers(Players) do
+        if Player == LocalPlayer then continue end
+
+        if table.find(whitelistedUsers2, Player.Name) then 
+            continue
+        end
+
+        local Character = Player.Character
+        if not Character then 
+            continue
+        end
+        
+        if #priorityUsers > 0 and not table.find(priorityUsers, Player.Name) then
+            continue
+        end
+
+        if RiftCoreSettings["Combat Mods"]["Silent Aim"]["Visible Check"] and not IsPlayerVisible(Player) then continue end
+
+        local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
+        local Humanoid = FindFirstChild(Character, "Humanoid")
+        if not HumanoidRootPart or not Humanoid or Humanoid and Humanoid.Health <= 0 then continue end
+
+        local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
+        if not OnScreen then continue end
+
+        local Distance = (getMousePosition() - ScreenPosition).Magnitude
+        if Distance <= (DistanceToMouse or RiftCoreSettings["Combat Mods"]["Silent Aim"]["Fov Size"] or 2000) then
+            Closest = ((RiftCoreSettings["Combat Mods"]["Silent Aim"]["Target Part"] == "Random" and Character[ValidTargetParts[math.random(1, #ValidTargetParts)]]) or Character[RiftCoreSettings["Combat Mods"]["Silent Aim"]["Target Part"]])
+            DistanceToMouse = Distance
+        end
+    end
+    return Closest
+end
