@@ -1,0 +1,222 @@
+
+--------[GAME SERVICES]-----------------------------------------------------------------------------------------------
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LogService = cloneref(game:GetService("LogService")) or game:GetService("LogService")
+local Lighting = cloneref(game:GetService("Lighting")) or game:GetService("Lighting")
+
+local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local StarterGui = cloneref(game:GetService("StarterGui")) or game:GetService("StarterGui")
+
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local ScriptContext = cloneref(game:GetService("ScriptContext")) or game:GetService("ScriptContext")
+
+TextChatService = cloneref(game:GetService("TextChatService"))
+isLegacyChat = TextChatService.ChatVersion == Enum.ChatVersion.LegacyChatService
+
+--------[PLAYER & ENVIRONMENT]----------------------------------------------------------------------------------------
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Backpack = LocalPlayer:FindFirstChild("Backpack")
+local Mouse = LocalPlayer:GetMouse()
+
+local gameId = game.PlaceId
+local Camera = workspace.CurrentCamera
+
+--------[FUNCTION SHORTCUTS]------------------------------------------------------------------------------------------
+local GetChildren = game.GetChildren
+local FindFirstChild = game.FindFirstChild
+
+local WorldToScreen = Camera.WorldToScreenPoint
+local WorldToViewportPoint = Camera.WorldToViewportPoint
+local GetPartsObscuringTarget = Camera.GetPartsObscuringTarget
+
+local RenderStepped = RunService.RenderStepped
+local GuiInset = GuiService.GetGuiInset
+local GetMouseLocation = UserInputService.GetMouseLocation
+
+local GetChildren = game.GetChildren
+local GetPlayers = Players.GetPlayers
+local WorldToScreen = Camera.WorldToScreenPoint
+local WorldToViewportPoint = Camera.WorldToViewportPoint
+local GetPartsObscuringTarget = Camera.GetPartsObscuringTarget
+local FindFirstChild = game.FindFirstChild
+local RenderStepped = RunService.RenderStepped
+local GuiInset = GuiService.GetGuiInset
+local GetMouseLocation = UserInputService.GetMouseLocation
+
+--------[ENVIRONMENT INFO]--------------------------------------------------------------------------------------------
+local Executor_Name = getexecutorname()
+
+local RiftCoreSettings = {
+    ["Combat Mods"] = {
+        ["Silent Aim"] = {
+            ["Enabled"] = false,
+            ["Visible Check"] = false,
+            ["Target Part"] = "Head",
+            ["Hit Chance"] = 100,
+            ["WhitelistedUsers"] = {},
+            ["Priority Users"] = {},
+            ["Snaplines"] = false,
+            ["Toggle Key"] = "E",
+
+            ["Fov Enabled"] = false,
+            ["Fov Color"] = Color3.fromRGB(255, 0, 0),
+            ["Fov Size"] = 70,
+            ["Fov NumSides"] = 70,
+            ["Fov Filled"] = false,
+            ["Fov Thickness"] = 1,
+            ["Wallbang"] = false,
+        },
+    },
+}
+
+getgenv().RiftCoreSettings = Settings
+local Camera = workspace.CurrentCamera
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+local GetChildren = game.GetChildren
+local GetPlayers = Players.GetPlayers
+local WorldToScreen = Camera.WorldToScreenPoint
+local WorldToViewportPoint = Camera.WorldToViewportPoint
+local GetPartsObscuringTarget = Camera.GetPartsObscuringTarget
+local FindFirstChild = game.FindFirstChild
+local RenderStepped = RunService.RenderStepped
+local GuiInset = GuiService.GetGuiInset
+local GetMouseLocation = UserInputService.GetMouseLocation
+
+local resume = coroutine.resume 
+local create = coroutine.create
+
+local ValidTargetParts = {"Head", "HumanoidRootPart"}
+local PredictionAmount = 0.165
+
+local fov_circle = Drawing.new("Circle")
+fov_circle.NumSides = RiftCoreSettings["Combat Mods"]["Silent Aim"]["Fov NumSides"]
+fov_circle.Radius = RiftCoreSettings["Combat Mods"]["Silent Aim"]["Fov Size"]
+fov_circle.Thickness = RiftCoreSettings["Combat Mods"]["Silent Aim"]["Fov Thickness"]
+fov_circle.Color = RiftCoreSettings["Combat Mods"]["Silent Aim"]["Fov Color"]
+fov_circle.Filled = false
+fov_circle.Visible = false
+fov_circle.ZIndex = 999
+fov_circle.Transparency = 1
+
+local ExpectedArguments = {Raycast = {ArgCountRequired = 3,Args = {"Instance", "Vector3", "Vector3", "RaycastParams"}}}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--------[SILENT AIM FUNCTIONS]----------------------------------------------------- ---------------------------------------
+function CalculateChance(Percentage)
+    Percentage = math.floor(Percentage)
+    local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
+    return chance <= Percentage / 100
+end
+
+function getPositionOnScreen(Vector)
+    local Vec3, OnScreen = WorldToScreen(Camera, Vector)
+    return Vector2.new(Vec3.X, Vec3.Y), OnScreen
+end
+
+function ValidateArguments(Args, RayMethod)
+    local Matches = 0
+    if #Args < RayMethod.ArgCountRequired then
+        return false
+    end
+    for Pos, Argument in next, Args do
+        if typeof(Argument) == RayMethod.Args[Pos] then
+            Matches = Matches + 1
+        end
+    end
+    return Matches >= RayMethod.ArgCountRequired
+end
+
+function getDirection(Origin, Position)
+    return (Position - Origin).Unit * 1000
+end
+
+local function getMousePosition()
+    return GetMouseLocation(UserInputService)
+end
+
+function IsPlayerVisible(Player)
+    local PlayerCharacter = Player.Character
+    local LocalPlayerCharacter = LocalPlayer.Character
+    
+    if not (PlayerCharacter or LocalPlayerCharacter) then return end 
+    
+    local PlayerRoot = FindFirstChild(PlayerCharacter, RiftCoreSettings["Combat Mods"]["Silent Aim"]["Target Part"]) or FindFirstChild(PlayerCharacter, "HumanoidRootPart")
+    
+    if not PlayerRoot then return end 
+    
+    local CastPoints, IgnoreList = {PlayerRoot.Position, LocalPlayerCharacter, PlayerCharacter}, {LocalPlayerCharacter, PlayerCharacter}
+    local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
+    
+    return ((ObscuringObjects == 0 and true) or (ObscuringObjects > 0 and false))
+end
+
+function getClosestPlayer()
+    if not RiftCoreSettings["Combat Mods"]["Silent Aim"]["Target Part"] then return end
+    local Closest
+    local DistanceToMouse
+    local priorityUsers = RiftCoreSettings["Combat Mods"]["Silent Aim"]["Priority Users"]
+    local whitelistedUsers2 = RiftCoreSettings["Combat Mods"]["Silent Aim"]["WhitelistedUsers"]
+
+    for _, Player in next, GetPlayers(Players) do
+        if Player == LocalPlayer then continue end
+
+        if table.find(whitelistedUsers2, Player.Name) then 
+            continue
+        end
+
+        local Character = Player.Character
+        if not Character then 
+            continue
+        end
+        
+        if #priorityUsers > 0 and not table.find(priorityUsers, Player.Name) then
+            continue
+        end
+
+        if RiftCoreSettings["Combat Mods"]["Silent Aim"]["Visible Check"] and not IsPlayerVisible(Player) then continue end
+
+        local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
+        local Humanoid = FindFirstChild(Character, "Humanoid")
+        if not HumanoidRootPart or not Humanoid or Humanoid and Humanoid.Health <= 0 then continue end
+
+        local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
+        if not OnScreen then continue end
+
+        local Distance = (getMousePosition() - ScreenPosition).Magnitude
+        if Distance <= (DistanceToMouse or RiftCoreSettings["Combat Mods"]["Silent Aim"]["Fov Size"] or 2000) then
+            Closest = ((RiftCoreSettings["Combat Mods"]["Silent Aim"]["Target Part"] == "Random" and Character[ValidTargetParts[math.random(1, #ValidTargetParts)]]) or Character[RiftCoreSettings["Combat Mods"]["Silent Aim"]["Target Part"]])
+            DistanceToMouse = Distance
+        end
+    end
+    return Closest
+end
