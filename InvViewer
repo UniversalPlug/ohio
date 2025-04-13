@@ -1,0 +1,357 @@
+--------[GAME SERVICES]-----------------------------------------------------------------------------------------------
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LogService = cloneref(game:GetService("LogService")) or game:GetService("LogService")
+local Lighting = cloneref(game:GetService("Lighting")) or game:GetService("Lighting")
+
+local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local StarterGui = cloneref(game:GetService("StarterGui")) or game:GetService("StarterGui")
+
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local ScriptContext = cloneref(game:GetService("ScriptContext")) or game:GetService("ScriptContext")
+
+TextChatService = cloneref(game:GetService("TextChatService"))
+isLegacyChat = TextChatService.ChatVersion == Enum.ChatVersion.LegacyChatService
+
+--------[PLAYER & ENVIRONMENT]----------------------------------------------------------------------------------------
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Backpack = LocalPlayer:FindFirstChild("Backpack")
+local Mouse = LocalPlayer:GetMouse()
+
+local gameId = game.PlaceId
+local Camera = workspace.CurrentCamera
+
+--------[FUNCTION SHORTCUTS]------------------------------------------------------------------------------------------
+local GetChildren = game.GetChildren
+local FindFirstChild = game.FindFirstChild
+
+local WorldToScreen = Camera.WorldToScreenPoint
+local WorldToViewportPoint = Camera.WorldToViewportPoint
+local GetPartsObscuringTarget = Camera.GetPartsObscuringTarget
+
+local RenderStepped = RunService.RenderStepped
+local GuiInset = GuiService.GetGuiInset
+local GetMouseLocation = UserInputService.GetMouseLocation
+
+local GetChildren = game.GetChildren
+local GetPlayers = Players.GetPlayers
+local WorldToScreen = Camera.WorldToScreenPoint
+local WorldToViewportPoint = Camera.WorldToViewportPoint
+local GetPartsObscuringTarget = Camera.GetPartsObscuringTarget
+local FindFirstChild = game.FindFirstChild
+local RenderStepped = RunService.RenderStepped
+local GuiInset = GuiService.GetGuiInset
+local GetMouseLocation = UserInputService.GetMouseLocation
+
+--------[ENVIRONMENT INFO]--------------------------------------------------------------------------------------------
+local Executor_Name = getexecutorname()
+
+local RiftCoreSettings = {
+    ["InventoryViewer"] = false,
+}
+
+
+----------[INV VIEWER]-----------------------------------------------------------------------------------------------------------------------
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = game.CoreGui
+
+local BG = Instance.new("Frame")
+BG.Name = "BG"
+BG.Parent = ScreenGui
+
+local Elements = Instance.new("Frame")
+Elements.Name = "Elements"
+Elements.Parent = BG
+
+local FeaturesWindow = Instance.new("Frame")
+FeaturesWindow.Name = "FeaturesWindow"
+FeaturesWindow.Parent = Elements
+FeaturesWindow.BackgroundColor3 = Color3.fromRGB(31, 31, 31)
+FeaturesWindow.BorderSizePixel = 2
+FeaturesWindow.BorderColor3 = Color3.fromRGB(0, 0, 0)
+FeaturesWindow.Position = UDim2.new(0.85, 0, 0.4, 0)
+FeaturesWindow.Size = UDim2.new(0, 340, 0, 24)
+FeaturesWindow.ZIndex = 3
+
+local WindowStroke = Instance.new("UIStroke")
+WindowStroke.Name = "Stroke"
+WindowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+WindowStroke.LineJoinMode = Enum.LineJoinMode.Miter
+WindowStroke.Color = Color3.fromRGB(63, 63, 63)
+WindowStroke.Parent = FeaturesWindow
+
+local Topbar = Instance.new("Frame")
+Topbar.Name = "Topbar"
+Topbar.AnchorPoint = Vector2.new(0.5, 0)
+Topbar.Size = UDim2.new(1, 0, 0, 18)
+Topbar.BorderColor3 = Color3.fromRGB(31, 31, 31)
+Topbar.Position = UDim2.new(0.5, 0, 0, 0)
+Topbar.BackgroundColor3 = Color3.fromRGB(31, 31, 31)
+Topbar.Parent = FeaturesWindow
+
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Parent = Topbar
+Title.BackgroundTransparency = 1
+Title.Size = UDim2.new(1, 0, 1, 0)
+Title.ZIndex = 4
+Title.Font = Enum.Font.Unknown
+Title.Text = "Inventory Viewer"
+Title.TextColor3 = Color3.fromRGB(255,255,255)
+Title.TextSize = 10
+
+local TopbarStroke = Instance.new("UIStroke")
+TopbarStroke.Name = "Stroke"
+TopbarStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+TopbarStroke.LineJoinMode = Enum.LineJoinMode.Miter
+TopbarStroke.Color = Color3.fromRGB(31, 31, 31)
+TopbarStroke.Parent = Topbar
+
+local Content = Instance.new("Frame")
+Content.Name = "Content"
+Content.Parent = FeaturesWindow
+Content.BackgroundColor3 = Color3.fromRGB(31, 31, 31)
+Content.BorderSizePixel = 2
+Content.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Content.Position = UDim2.new(0, 0, 1, 0)
+Content.Size = UDim2.new(1, 0, 0, 0)
+Content.ZIndex = 3
+
+local ContentStroke = Instance.new("UIStroke")
+ContentStroke.Name = "Stroke"
+ContentStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+ContentStroke.LineJoinMode = Enum.LineJoinMode.Miter
+ContentStroke.Color = Color3.fromRGB(63, 63, 63)
+ContentStroke.Parent = Content
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = Content
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local currentPlayer = nil
+local lastHoverTime = 0
+local HOVER_TIMEOUT = 0.1 
+
+local dragging
+local dragInput
+local dragStart
+local startPos
+
+--------[INV VIEWER FUNCTIONS]--------------------------------------------------------------------------------------------
+local function update(input)
+    local delta = input.Position - dragStart
+    local newPosition = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    
+    local viewportSize = workspace.CurrentCamera.ViewportSize
+    
+    local minX = 0
+    local maxX = viewportSize.X - FeaturesWindow.AbsoluteSize.X
+    local minY = 0
+    local maxY = viewportSize.Y - FeaturesWindow.AbsoluteSize.Y
+    
+    local clampedX = math.clamp(newPosition.X.Offset, minX, maxX)
+    local clampedY = math.clamp(newPosition.Y.Offset, minY, maxY)
+    
+    FeaturesWindow.Position = UDim2.new(0, clampedX, 0, clampedY)
+end
+
+Topbar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = FeaturesWindow.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+Topbar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
+
+local function updateToolsList(player)
+    for _, child in ipairs(Content:GetChildren()) do
+        if child:IsA("TextLabel") then
+            child:Destroy()
+        end
+    end
+    
+    if not player then
+        Title.Text = "Inventory Viewer"
+        Content.Size = UDim2.new(1, 0, 0, 0)
+        return
+    end
+    
+    Title.Text = player.Name .. "'s Backpack"
+
+    local function createToolLabel(toolName, isEquipped)
+        local toolLabel = Instance.new("TextLabel")
+        toolLabel.BackgroundTransparency = 1
+        toolLabel.Size = UDim2.new(0.9, 0, 0, 18)
+        toolLabel.Font = Enum.Font.Unknown
+        toolLabel.Text = (isEquipped and "[~] " or "[+] ") .. toolName
+        toolLabel.TextColor3 = Color3.fromRGB(255,255,255)
+        toolLabel.TextSize = 10
+        toolLabel.TextXAlignment = Enum.TextXAlignment.Left
+        toolLabel.Parent = Content
+        toolLabel.ZIndex = 4
+        return toolLabel
+    end
+    
+    local toolCount = 0
+    
+    local backpack = player:FindFirstChildOfClass("Backpack")
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") then
+                createToolLabel(tool.Name, false)  
+                toolCount += 1
+            end
+        end
+    end
+    
+    local character = player.Character
+    if character then
+        for _, tool in ipairs(character:GetChildren()) do
+            if tool:IsA("Tool") then
+                createToolLabel(tool.Name, true)  
+                toolCount += 1
+            end
+        end
+    end
+    
+    Content.Size = UDim2.new(1, 0, 0, toolCount * 18 + (condition and (4 * 18) or 0))
+end
+
+local function getTargetPlayer()
+    local target = Mouse.Target
+    if target then
+        local character = target:FindFirstAncestorOfClass("Model")
+        if character then
+            local player = Players:GetPlayerFromCharacter(character)
+            if player then
+                return player
+            end
+        end
+    end
+    
+    local mouseRay = Mouse.UnitRay
+    local rayOrigin = mouseRay.Origin
+    local rayDirection = mouseRay.Direction * 1000
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local character = player.Character
+            if character then
+                local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+                if humanoidRootPart then
+                    local targetPos = humanoidRootPart.Position
+                    local toTarget = targetPos - rayOrigin
+                    
+                    local dot = toTarget:Dot(rayDirection.Unit)
+                    if dot > 0 then
+                        local projection = rayDirection.Unit * dot
+                        local distance = (toTarget - projection).Magnitude
+                        
+                        if distance < 4 then
+                            return player
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return nil
+end
+
+local function checkHoverTimeout()
+    if currentPlayer and tick() - lastHoverTime > HOVER_TIMEOUT then
+        currentPlayer = nil
+        updateToolsList(nil)
+    end
+end
+
+local function checkMouseTarget()
+    if not RiftCoreSettings.InventoryViewer then return end
+    
+    local player = getTargetPlayer()
+    
+    if player then
+        lastHoverTime = tick()
+        if player ~= currentPlayer then
+            currentPlayer = player
+            updateToolsList(player)
+        end
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    checkMouseTarget()
+    checkHoverTimeout()
+end)
+
+local function toggleVisibility(show)
+    local targetTransparency = show and 0 or 1
+    local targetSize = show and UDim2.new(1, 0, 0, Content:FindFirstChild("UIListLayout").AbsoluteContentSize.Y) or UDim2.new(1, 0, 0, 0)
+    
+    ScreenGui.Enabled = show
+    
+    local windowTween = TweenService:Create(FeaturesWindow, tweenInfo, {
+        BackgroundTransparency = targetTransparency
+    })
+    
+    local contentTween = TweenService:Create(Content, tweenInfo, {
+        BackgroundTransparency = targetTransparency,
+        Size = targetSize
+    })
+    
+    local strokeTweens = {
+        TweenService:Create(WindowStroke, tweenInfo, {Transparency = targetTransparency}),
+        TweenService:Create(TopbarStroke, tweenInfo, {Transparency = targetTransparency}),
+        TweenService:Create(ContentStroke, tweenInfo, {Transparency = targetTransparency})
+    }
+    
+    local titleTween = TweenService:Create(Title, tweenInfo, {
+        TextTransparency = targetTransparency
+    })
+    
+    windowTween:Play()
+    contentTween:Play()
+    titleTween:Play()
+    for _, tween in ipairs(strokeTweens) do
+        tween:Play()
+    end
+end
+
+local function toggleMaster()
+    RiftCoreSettings.InventoryViewer = not RiftCoreSettings.InventoryViewer
+    currentPlayer = nil
+    updateToolsList(nil)
+    toggleVisibility(RiftCoreSettings.InventoryViewer)
+end
+
+local mouseConnection = Mouse.Move:Connect(function()
+    checkMouseTarget()
+end)
+
+toggleVisibility(RiftCoreSettings.InventoryViewer)
