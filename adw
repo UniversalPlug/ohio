@@ -1,0 +1,135 @@
+local HookManager = {
+    Hooks = {},
+    NamecallHooks = {},
+    MetamethodHooks = {}
+}
+
+-- Utility function to get the original function
+local function getOriginalFunction(func)
+    return HookManager.Hooks[func] and HookManager.Hooks[func].Original or func
+end
+
+-- Hook a function
+function HookManager.HookFunction(func, hook)
+    if not func then return end
+    
+    local original = getOriginalFunction(func)
+    
+    HookManager.Hooks[func] = {
+        Original = original,
+        Hook = hook
+    }
+    
+    return function(...)
+        return hook(original, ...)
+    end
+end
+
+-- Hook namecall
+function HookManager.HookNamecall(instance, callback)
+    if not instance then return end
+    
+    local mt = getmetatable(instance)
+    if not mt then return end
+    
+    local originalNamecall = mt.__namecall
+    if not originalNamecall then return end
+    
+    HookManager.NamecallHooks[instance] = {
+        Original = originalNamecall,
+        Callback = callback
+    }
+    
+    mt.__namecall = function(self, ...)
+        local hook = HookManager.NamecallHooks[self]
+        if hook then
+            return hook.Callback(hook.Original, self, ...)
+        end
+        return originalNamecall(self, ...)
+    end
+end
+
+-- Hook metamethod
+function HookManager.HookMetamethod(instance, metamethod, callback)
+    if not instance then return end
+    
+    local mt = getmetatable(instance)
+    if not mt then return end
+    
+    local original = mt[metamethod]
+    if not original then return end
+    
+    HookManager.MetamethodHooks[instance] = HookManager.MetamethodHooks[instance] or {}
+    HookManager.MetamethodHooks[instance][metamethod] = {
+        Original = original,
+        Callback = callback
+    }
+    
+    mt[metamethod] = function(self, ...)
+        local hook = HookManager.MetamethodHooks[self] and HookManager.MetamethodHooks[self][metamethod]
+        if hook then
+            return hook.Callback(hook.Original, self, ...)
+        end
+        return original(self, ...)
+    end
+end
+
+-- Unhook a function
+function HookManager.UnhookFunction(func)
+    if not func or not HookManager.Hooks[func] then return end
+    
+    local original = HookManager.Hooks[func].Original
+    HookManager.Hooks[func] = nil
+    
+    return original
+end
+
+-- Unhook namecall
+function HookManager.UnhookNamecall(instance)
+    if not instance or not HookManager.NamecallHooks[instance] then return end
+    
+    local mt = getmetatable(instance)
+    if not mt then return end
+    
+    local original = HookManager.NamecallHooks[instance].Original
+    mt.__namecall = original
+    HookManager.NamecallHooks[instance] = nil
+end
+
+-- Unhook metamethod
+function HookManager.UnhookMetamethod(instance, metamethod)
+    if not instance or not HookManager.MetamethodHooks[instance] or not HookManager.MetamethodHooks[instance][metamethod] then return end
+    
+    local mt = getmetatable(instance)
+    if not mt then return end
+    
+    local original = HookManager.MetamethodHooks[instance][metamethod].Original
+    mt[metamethod] = original
+    HookManager.MetamethodHooks[instance][metamethod] = nil
+end
+
+return HookManager 
+
+-- Example of hooking a function
+local function originalFunction(a, b)
+    return a + b
+end
+
+local hookedFunction = HookManager.HookFunction(originalFunction, function(original, a, b)
+    print("Function was called with", a, b)
+    return original(a, b)
+end)
+
+-- Example of hooking namecall
+local part = Instance.new("Part")
+HookManager.HookNamecall(part, function(original, self, ...)
+    local args = {...}
+    print("Namecall was made on part:", args[1])
+    return original(self, ...)
+end)
+
+-- Example of hooking a metamethod
+HookManager.HookMetamethod(part, "__index", function(original, self, key)
+    print("Indexing part with key:", key)
+    return original(self, key)
+end)
